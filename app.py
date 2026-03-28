@@ -576,7 +576,6 @@ def update_room_editor(store, spk, mode_idx, Lz, canvas_x, canvas_y):
                 x_grid = np.array(grid_info["x_grid"])
                 y_grid = np.array(grid_info["y_grid"])
                 P = fields[fidx]
-                # Remplacer NaN par 0 pour affichage
                 P_disp = np.where(np.isnan(P), None, P)
                 fig.add_trace(go.Heatmap(
                     z=P_disp, x=x_grid, y=y_grid,
@@ -586,6 +585,12 @@ def update_room_editor(store, spk, mode_idx, Lz, canvas_x, canvas_y):
                                   tickfont=dict(color="#6B6560")),
                     showscale=True,
                 ))
+            else:
+                fig.add_annotation(
+                    x=0.5, y=0.5, xref="paper", yref="paper",
+                    text="Mode axial Z — variation uniquement en hauteur<br>Voir la vue 3D",
+                    showarrow=False, font=dict(size=13, color=AMBER, family="Outfit"),
+                    bgcolor="rgba(255,255,255,0.88)", bordercolor=AMBER, borderwidth=1, borderpad=8)
 
         # Enceintes
         for key, color, txt_color, border, label in [
@@ -708,25 +713,63 @@ def freq_v2(mode_idx, room, Lz):
     Input("speakers-store-v2","data"),
 )
 def graph3d_v2(mode_idx, room, Lz, spk):
+    import re as _re
+    empty = go.Figure()
+    empty.update_layout(paper_bgcolor=WHITE, plot_bgcolor=CREAM, height=450,
+                        annotations=[dict(text="Dessiner et fermer la pièce", x=0.5, y=0.5,
+                                         xref="paper", yref="paper", showarrow=False,
+                                         font=dict(size=16, color="#9A948E"))])
     if not room["closed"] or len(room["points"]) < 3:
-        fig = go.Figure()
-        fig.update_layout(paper_bgcolor=WHITE, plot_bgcolor=CREAM, height=450,
-                          annotations=[dict(text="Dessiner et fermer la pièce", x=0.5, y=0.5,
-                                           xref="paper", yref="paper", showarrow=False,
-                                           font=dict(size=16, color="#9A948E"))])
-        return fig
-    Lx, Ly = polygon_bounding_box(room["points"])
-    # Utilise le 1er mode pour la 3D (m=1,n=0,p=0 par défaut)
-    m, n, p = 1, 0, 0
-    X, Y, Z, P = pressure_field_3d(m, n, p, Lx, Ly, Lz, resolution=25)
+        return empty
+
+    pts = room["points"]
+    modes, fields, grid_info = get_fdm_modes_cached(pts, Lz)
+    if not modes or not grid_info:
+        return empty
+
+    fidx = min(int(mode_idx) if mode_idx is not None else 0, len(modes) - 1)
+    field = fields[fidx] if fidx < len(fields) else None
+
+    x_grid = np.array(grid_info["x_grid"])
+    y_grid = np.array(grid_info["y_grid"])
+    mask = grid_info["mask"]  # (ny, nx)
+
+    # Sous-échantillonnage pour performance 3D
+    step = max(1, len(x_grid) // 40)
+    x_3d = x_grid[::step]
+    y_3d = y_grid[::step]
+    mask_ds = mask[::step, ::step]   # (ny_ds, nx_ds)
+
+    nz = 8
+    z_vals = np.linspace(0, Lz, nz)
+    X3d, Y3d, Z3d = np.meshgrid(x_3d, y_3d, z_vals, indexing="ij")  # (nx_ds, ny_ds, nz)
+
+    if field is not None:
+        # Mode 2D FDM extrudé en Z (variation uniforme sur la hauteur)
+        field_ds = field[::step, ::step]          # (ny_ds, nx_ds)
+        P3d = np.tile(field_ds.T[:, :, np.newaxis], (1, 1, nz))  # (nx_ds, ny_ds, nz)
+        mask_3d = np.tile(mask_ds.T[:, :, np.newaxis], (1, 1, nz))
+        P3d[~mask_3d] = np.nan
+    else:
+        # Mode axial Z : P(x,y,z) = cos(p_z·π·z/Lz) dans le polygone
+        p_z_val = 1
+        m_pz = _re.search(r"p=(\d+)", modes[fidx].get("comment", ""))
+        if m_pz:
+            p_z_val = int(m_pz.group(1))
+        inside = np.where(mask_ds.T, 1.0, np.nan)  # (nx_ds, ny_ds)
+        cos_z = np.cos(p_z_val * np.pi * z_vals / Lz)
+        P3d = inside[:, :, np.newaxis] * cos_z[np.newaxis, np.newaxis, :]
+
     fig = go.Figure()
     fig.add_trace(go.Isosurface(
-        x=X.flatten(), y=Y.flatten(), z=Z.flatten(), value=P.flatten(),
-        isomin=-0.8, isomax=0.8, surface_count=5,
+        x=X3d.flatten(), y=Y3d.flatten(), z=Z3d.flatten(),
+        value=P3d.flatten(),
+        isomin=-0.7, isomax=0.7, surface_count=5,
         colorscale=[[0,"#1D4ED8"],[0.5,CREAM],[1,AMBER]],
         caps=dict(x_show=False, y_show=False, z_show=False),
-        opacity=0.45, showscale=True,
+        opacity=0.5, showscale=True,
         colorbar=dict(title=dict(text="Pression", font=dict(color=AMBER)), tickfont=dict(color="#6B6560"))))
+
     for key, color, border, label in [("s1",AMBER,WHITE,"A"),("s2",WHITE,AMBER,"B")]:
         s = spk.get(key)
         if s:
@@ -735,15 +778,21 @@ def graph3d_v2(mode_idx, room, Lz, spk):
                 text=[label], textfont=dict(size=12, color=DARK if color==WHITE else WHITE),
                 marker=dict(size=10, color=color, line=dict(color=border, width=2)),
                 name=f"Enceinte {label}"))
+
+    xs = [p["x"] for p in pts]
+    ys = [p["y"] for p in pts]
+    Lx = max(xs) - min(xs)
+    Ly = max(ys) - min(ys)
     ratio = max(Lx, Ly, Lz)
+
     fig.update_layout(
         scene=dict(
-            xaxis=dict(range=[0,Lx], title="X", backgroundcolor=CREAM, gridcolor=BORDER),
-            yaxis=dict(range=[0,Ly], title="Y", backgroundcolor=CREAM, gridcolor=BORDER),
-            zaxis=dict(range=[0,Lz], title="Z", backgroundcolor=CREAM, gridcolor=BORDER),
+            xaxis=dict(range=[min(xs), max(xs)], title="X (m)", backgroundcolor=CREAM, gridcolor=BORDER),
+            yaxis=dict(range=[min(ys), max(ys)], title="Y (m)", backgroundcolor=CREAM, gridcolor=BORDER),
+            zaxis=dict(range=[0, Lz], title="Z (m)", backgroundcolor=CREAM, gridcolor=BORDER),
             bgcolor=CREAM, aspectmode="manual",
             aspectratio=dict(x=Lx/ratio, y=Ly/ratio, z=Lz/ratio)),
-        margin=dict(l=0,r=0,t=10,b=0), height=450,
+        margin=dict(l=0, r=0, t=10, b=0), height=450,
         paper_bgcolor=WHITE, font=dict(color=DARK, family="Outfit, sans-serif"))
     return fig
 
