@@ -211,26 +211,31 @@ def compute_polygon_modes(points, Lz, resolution=25, n_modes=20):
 
 def _classify_mode_2d(P, mask, k2, Lx, Ly):
     """
-    Classification heuristique du mode 2D basée sur la structure spatiale.
-    Compte les zéros (noeuds) dans les directions X et Y.
+    Classification du mode 2D basée sur des coupes aux quartiles.
+    On évite la moyenne (qui annule les modes purs) et les nœuds (milieu exact).
     """
-    # Profil moyen en X et Y
     rows_valid = np.where(mask.any(axis=1))[0]
     cols_valid = np.where(mask.any(axis=0))[0]
 
     if len(rows_valid) < 2 or len(cols_valid) < 2:
         return "Inconnu", "★☆☆", "#9A948E", "Mode non classifiable"
 
-    prof_x = np.nanmean(np.where(mask, P, np.nan), axis=0)[cols_valid]
-    prof_y = np.nanmean(np.where(mask, P, np.nan), axis=1)[rows_valid]
-
     def count_sign_changes(arr):
         arr_clean = arr[~np.isnan(arr)]
-        if len(arr_clean) < 2: return 0
-        return np.sum(np.diff(np.sign(arr_clean)) != 0)
+        if len(arr_clean) < 2:
+            return 0
+        return int(np.sum(np.diff(np.sign(arr_clean)) != 0))
 
-    nx_nodes = count_sign_changes(prof_x)
-    ny_nodes = count_sign_changes(prof_y)
+    # Coupes aux 1er et 3e quartiles pour éviter de tomber sur un nœud
+    r1 = rows_valid[len(rows_valid) // 4]
+    r3 = rows_valid[3 * len(rows_valid) // 4]
+    c1 = cols_valid[len(cols_valid) // 4]
+    c3 = cols_valid[3 * len(cols_valid) // 4]
+
+    nx_nodes = max(count_sign_changes(P[r1, cols_valid]),
+                   count_sign_changes(P[r3, cols_valid]))
+    ny_nodes = max(count_sign_changes(P[rows_valid, c1]),
+                   count_sign_changes(P[rows_valid, c3]))
 
     if nx_nodes > 0 and ny_nodes == 0:
         return "Axial X", "★★★", "#B45309", "Mode axial horizontal — très énergétique"
