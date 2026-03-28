@@ -1,0 +1,321 @@
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+
+/* ── Reset ── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: #FAF9F6;
+    color: #1A1814;
+    font-family: 'Outfit', -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* ── Container ── */
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+/* ── Titre ── */
+.title {
+    text-align: center;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 2rem;
+    font-weight: 400;
+    margin-bottom: 28px;
+    color: #1A1814;
+    letter-spacing: -0.5px;
+}
+
+.title em {
+    color: #B45309;
+    font-style: italic;
+}
+
+/* ── Panneaux contrôle ── */
+.controls { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+
+.control-section {
+    background: #FFFFFF;
+    border: 1px solid #E8E4DC;
+    border-radius: 12px;
+    padding: 18px;
+    flex: 1;
+    min-width: 240px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.control-section h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #B45309;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #F0EDE6;
+}
+
+/* ── Sliders ── */
+.slider-row { margin-bottom: 16px; }
+
+.slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.slider-label span {
+    font-size: 0.82rem;
+    color: #6B6560;
+    font-weight: 400;
+}
+
+.slider-value {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #B45309;
+    background: #FEF3E2;
+    border: 1px solid #F0C585;
+    border-radius: 6px;
+    padding: 2px 10px;
+    min-width: 52px;
+    text-align: center;
+}
+
+/* ── Badge fréquence ── */
+.freq-badge {
+    margin-top: 14px;
+    background: #FEF3E2;
+    border: 1px solid #B45309;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    font-size: 1.05rem;
+    color: #B45309;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* ── Hint ── */
+.hint { font-size: 0.78rem; color: #9A948E; margin-bottom: 8px; font-style: italic; }
+
+/* ── Boutons ── */
+.btn {
+    padding: 9px 18px;
+    background: #B45309;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    margin-top: 10px;
+}
+.btn:hover { background: #92400E; }
+
+.btn-secondary {
+    background: transparent;
+    color: #B45309;
+    border: 1px solid #B45309;
+}
+.btn-secondary:hover { background: #FEF3E2; }
+
+/* ── Graphiques ── */
+.graphs { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+
+.graph-box {
+    background: #FFFFFF;
+    border: 1px solid #E8E4DC;
+    border-radius: 12px;
+    padding: 18px;
+    flex: 1;
+    min-width: 320px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.graph-box h3 {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #6B6560;
+    margin-bottom: 12px;
+}
+
+/* ── Analyse (pleine largeur) ── */
+.analyse-section {
+    background: #FFFFFF;
+    border: 1px solid #E8E4DC;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.analyse-section h3 {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #B45309;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #F0EDE6;
+}
+
+.analyse-btn-row { margin-bottom: 16px; }
+
+/* ── Mini conclusion ── */
+.mini-conclusion {
+    background: #FEF3E2;
+    border-left: 3px solid #B45309;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: #1A1814;
+}
+
+.mini-conclusion strong {
+    display: block;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #B45309;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.mini-conclusion ul { padding-left: 18px; }
+.mini-conclusion li { margin-bottom: 4px; }
+
+/* ── Grille 3 colonnes ── */
+.analyse-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.analyse-col {
+    background: #FAF9F6;
+    border: 1px solid #E8E4DC;
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.analyse-col-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #E8E4DC;
+}
+
+.analyse-col p {
+    font-size: 0.82rem;
+    color: #3D3A35;
+    margin-bottom: 8px;
+    line-height: 1.55;
+}
+
+/* ── Infos enceintes ── */
+#speaker-info p { margin-bottom: 8px; font-size: 0.84rem; color: #3D3A35; }
+
+/* ── Tableau modes ── */
+.modes-section {
+    background: #FFFFFF;
+    border: 1px solid #E8E4DC;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.modes-section h3 {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #6B6560;
+    margin-bottom: 14px;
+}
+
+.modes-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+
+.modes-table th {
+    background: #FAF9F6;
+    padding: 9px 14px;
+    text-align: left;
+    color: #B45309;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid #E8E4DC;
+}
+
+.modes-table td { padding: 7px 14px; border-bottom: 1px solid #F0EDE6; color: #3D3A35; }
+.modes-table tr:hover { background: #FAF9F6; }
+.mode-axial      { color: #B45309; font-weight: 600; }
+.mode-tangentiel { color: #92400E; }
+.mode-oblique    { color: #9A948E; }
+
+/* ── Cache les inputs numériques natifs des sliders Dash ── */
+.dash-range-slider-input {
+    display: none !important;
+}
+
+/* ── Sliders : couleur ambre ── */
+.rc-slider-track { background-color: #B45309 !important; }
+.rc-slider-handle { border-color: #B45309 !important; background: #B45309 !important; }
+.rc-slider-handle:hover { border-color: #92400E !important; }
+.rc-slider-rail { background-color: #E8E4DC !important; }
+
+/* ── Onglets V1/V2 ── */
+.tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #E8E4DC;
+    padding-bottom: 0;
+}
+
+.tab-btn {
+    padding: 10px 22px;
+    background: transparent;
+    color: #9A948E;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 500;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    margin-top: 0;
+}
+
+.tab-btn:hover { color: #B45309; }
+
+.tab-active {
+    color: #B45309 !important;
+    border-bottom: 3px solid #B45309 !important;
+    font-weight: 600;
+}
+
+/* ── Bouton outline ── */
+.btn-outline {
+    background: transparent !important;
+    color: #B45309 !important;
+    border: 1px solid #B45309 !important;
+}
+.btn-outline:hover {
+    background: #FEF3E2 !important;
+}
