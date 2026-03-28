@@ -1,6 +1,7 @@
-dash==2.17.1
-plotly==5.22.0
-numpy==1.26.4
-pandas==2.2.2
+dash==4.1.0
+plotly==6.6.0
+numpy==2.4.3
+pandas==3.0.1
+scipy==1.17.1
+matplotlib==3.10.8
 gunicorn==22.0.0
-scipy==1.11.4
