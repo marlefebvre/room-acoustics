@@ -896,7 +896,7 @@ def run_analysis_v2(_, room, Lz, mode_idx, spk):
             problems.append(f"⚠️ {label} trop loin des murs ({int(wd*100)}cm > 100cm) → perte de soutien des basses.")
             priorities.append(f"{label} trop loin des murs ({int(wd*100)}cm)")
 
-    recommendations.append("Utilisez les zones bleues (nœuds) sur le plan pour positionner vos enceintes — couplage faible = moins de boom.")
+    recommendations.append("Positionnez les enceintes dans les zones blanches/claires du plan (nœuds, pression ≈ 0) — évitez les zones bleues (−1) et ambrées (+1) qui sont des ventres de résonance.")
     recommendations.append("REW (Room EQ Wizard, gratuit) permet de mesurer la réponse réelle et de valider ces calculs.")
 
     # Forme complexe : info
