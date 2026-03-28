@@ -2,8 +2,11 @@
 app.py — Room Acoustics V2 — Éditeur de plan + visualisation
 """
 
+import json
+import os
 import dash
-from dash import dcc, html, Input, Output, State, callback_context
+from dash import dcc, html, Input, Output, State, callback_context, no_update
+from flask import request as flask_request, jsonify
 import plotly.graph_objects as go
 import numpy as np
 
@@ -15,11 +18,52 @@ from polygon_acoustics import get_fdm_modes_cached, pressure_field_polygon, spea
 
 app = dash.Dash(__name__, title="Room Acoustics")
 
+
+@app.server.route("/load-rooms", methods=["GET"])
+def route_load_rooms():
+    return jsonify(_load_library())
+
+@app.server.route("/save-room", methods=["POST"])
+def route_save_room():
+    data = flask_request.get_json()
+    library = _load_library()
+    for i, r in enumerate(library):
+        if r["name"] == data["name"]:
+            library[i] = data
+            _save_library(library)
+            return jsonify({"status": "updated"})
+    library.append(data)
+    _save_library(library)
+    return jsonify({"status": "saved"})
+
+@app.server.route("/delete-room", methods=["POST"])
+def route_delete_room():
+    data = flask_request.get_json()
+    _save_library([r for r in _load_library() if r["name"] != data["name"]])
+    return jsonify({"status": "deleted"})
+
 AMBER  = "#B45309"
 CREAM  = "#FAF9F6"
 DARK   = "#1A1814"
 WHITE  = "#FFFFFF"
 BORDER = "#E8E4DC"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bibliothèque de pièces — JSON local
+# ─────────────────────────────────────────────────────────────────────────────
+
+_LIBRARY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rooms_library.json")
+
+def _load_library():
+    if os.path.exists(_LIBRARY_FILE):
+        with open(_LIBRARY_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def _save_library(data):
+    with open(_LIBRARY_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layout
@@ -161,13 +205,33 @@ app.layout = html.Div([
                            tooltip={"placement":"bottom"}),
                 html.Div(id="freq-display-v2", className="freq-badge"),
             ], className="control-section"),
+
+            html.Div([
+                html.H3("Bibliothèque de pièces"),
+                html.Div([
+                    dcc.Input(id="room-name-input", type="text", placeholder="Nommer cette pièce…",
+                              style={"flex": "1", "padding": "6px 10px", "border": f"1px solid {BORDER}",
+                                     "borderRadius": "6px", "fontFamily": "Outfit, sans-serif", "fontSize": "0.88rem"}),
+                    html.Button("💾 Sauvegarder", id="btn-save-room", className="btn"),
+                ], style={"display": "flex", "gap": "8px", "alignItems": "center"}),
+                html.Div([
+                    dcc.Dropdown(id="room-library-dropdown", placeholder="Charger une pièce sauvegardée…",
+                                 options=[], clearable=True,
+                                 style={"flex": "1", "fontSize": "0.88rem"}),
+                    html.Button("🗑️ Supprimer", id="btn-delete-room", className="btn btn-outline"),
+                ], style={"display": "flex", "gap": "8px", "alignItems": "center", "marginTop": "8px"}),
+                html.Div(id="room-library-status", style={"marginTop": "6px", "fontSize": "0.82rem"}),
+            ], className="control-section"),
         ], className="controls"),
 
         # Plan de dessin
         html.Div([
             html.Div([
                 html.H3("Plan de la pièce — Papier millimétré"),
-                dcc.Graph(id="graph-room-editor", config={"scrollZoom": False, "displayModeBar": False, "staticPlot": False}, clickData=None),
+                dcc.Graph(id="graph-room-editor",
+                          config={"scrollZoom": False, "displayModeBar": False, "staticPlot": False, "responsive": True},
+                          style={"height": "500px"},
+                          clickData=None),
             ], className="graph-box", style={"flex": "2"}),
             html.Div([
                 html.H3("Vue 3D"),
@@ -193,6 +257,7 @@ app.layout = html.Div([
     dcc.Store(id="suggestions-store", data={}),
     dcc.Store(id="room-points-store", data={"points": [], "closed": False}),
     dcc.Store(id="speakers-store-v2", data={"s1": None, "s2": None}),
+    dcc.Store(id="rooms-library-store", data=[]),
 
 ], className="container")
 
@@ -811,6 +876,102 @@ def run_analysis_v2(_, room, Lz, mode_idx, spk):
     ], className="analyse-grid")
 
     return html.Div([banner, conclusion, grid])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V2 — Bibliothèque de pièces
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.callback(
+    Output("rooms-library-store", "data"),
+    Output("room-library-status", "children"),
+    Input("btn-save-room", "n_clicks"),
+    Input("btn-delete-room", "n_clicks"),
+    State("room-name-input", "value"),
+    State("room-points-store", "data"),
+    State("canvas-x", "value"),
+    State("canvas-y", "value"),
+    State("lz2", "value"),
+    State("room-library-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def library_actions(save_clicks, delete_clicks, name, room_store, canvas_x, canvas_y, lz, selected_name):
+    ctx = callback_context
+    if not ctx.triggered:
+        return _load_library(), no_update
+    trigger = ctx.triggered[0]["prop_id"]
+
+    if "btn-save-room" in trigger:
+        if not name or not name.strip():
+            return no_update, html.Span("⚠️ Entrez un nom.", style={"color": AMBER})
+        if not room_store.get("points"):
+            return no_update, html.Span("⚠️ Aucun point à sauvegarder.", style={"color": AMBER})
+        room_data = {
+            "name": name.strip(),
+            "points": room_store["points"],
+            "closed": room_store.get("closed", False),
+            "canvas_x": canvas_x,
+            "canvas_y": canvas_y,
+            "lz": lz,
+        }
+        library = _load_library()
+        for i, r in enumerate(library):
+            if r["name"] == room_data["name"]:
+                library[i] = room_data
+                _save_library(library)
+                return library, html.Span(f"✅ '{room_data['name']}' mis à jour.", style={"color": "#166534"})
+        library.append(room_data)
+        _save_library(library)
+        return library, html.Span(f"✅ '{room_data['name']}' sauvegardé.", style={"color": "#166534"})
+
+    if "btn-delete-room" in trigger:
+        if not selected_name:
+            return no_update, html.Span("⚠️ Sélectionnez une pièce à supprimer.", style={"color": AMBER})
+        library = [r for r in _load_library() if r["name"] != selected_name]
+        _save_library(library)
+        return library, html.Span(f"🗑️ '{selected_name}' supprimé.", style={"color": "#6B6560"})
+
+    return no_update, no_update
+
+
+@app.callback(
+    Output("rooms-library-store", "data", allow_duplicate=True),
+    Input("btn-v2", "n_clicks"),
+    prevent_initial_call=True,
+)
+def load_library_on_tab(_):
+    return _load_library()
+
+
+@app.callback(
+    Output("room-library-dropdown", "options"),
+    Input("rooms-library-store", "data"),
+)
+def update_dropdown_options(rooms):
+    return [{"label": r["name"], "value": r["name"]} for r in rooms]
+
+
+@app.callback(
+    Output("room-points-store", "data", allow_duplicate=True),
+    Output("canvas-x", "value", allow_duplicate=True),
+    Output("canvas-y", "value", allow_duplicate=True),
+    Output("lz2", "value", allow_duplicate=True),
+    Input("room-library-dropdown", "value"),
+    State("rooms-library-store", "data"),
+    prevent_initial_call=True,
+)
+def load_room_from_library(name, rooms):
+    if not name:
+        return no_update, no_update, no_update, no_update
+    for r in rooms:
+        if r["name"] == name:
+            return (
+                {"points": r["points"], "closed": r.get("closed", True)},
+                r.get("canvas_x", 8),
+                r.get("canvas_y", 6),
+                r.get("lz", 2.5),
+            )
+    return no_update, no_update, no_update, no_update
 
 
 server = app.server

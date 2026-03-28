@@ -98,7 +98,7 @@ def make_grid_figure(points, closed, Lx_max=15, Ly_max=12, step=0.5):
         plot_bgcolor=CREAM, paper_bgcolor="#FFFFFF",
         font=dict(color=DARK, family="Outfit, sans-serif"),
         margin=dict(l=40, r=20, t=10, b=40),
-        height=500,
+        autosize=True,
         showlegend=False,
         dragmode=False,
         clickmode="event",
