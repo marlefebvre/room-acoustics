@@ -280,7 +280,7 @@ app.layout = html.Div([
         ], className="tutorial-card"),
     ], id="tutorial-overlay", style={"display": "none"}),
 
-    html.Footer("v1.5.1", className="app-version"),
+    html.Footer("v1.5.2", className="app-version"),
 
 ], className="container")
 
@@ -911,9 +911,17 @@ def run_analysis_v2(_, room, Lz, mode_idx, spk):
         else:
             impacts.append(f"🟡 {label} en {pos} : couplage intermédiaire ({c:.2f}).")
 
-        # Distance mur
+        # Distance mur (relative à la bounding box du polygone)
         from analysis import wall_distance, MIN_WALL_DIST, MAX_WALL_DIST
-        wd = wall_distance(s["x"], s["y"], max([p["x"] for p in pts]), max([p["y"] for p in pts]))
+        x_min = min(p["x"] for p in pts)
+        y_min = min(p["y"] for p in pts)
+        x_max = max(p["x"] for p in pts)
+        y_max = max(p["y"] for p in pts)
+        sx_rel = s["x"] - x_min
+        sy_rel = s["y"] - y_min
+        Lx_rel = x_max - x_min
+        Ly_rel = y_max - y_min
+        wd = wall_distance(sx_rel, sy_rel, Lx_rel, Ly_rel)
         if wd < MIN_WALL_DIST:
             problems.append(f"⚠️ {label} trop proche d'un mur ({int(wd*100)}cm) → +6 dB non contrôlé dans les graves.")
             priorities.append(f"{label} trop proche d'un mur ({int(wd*100)}cm)")
