@@ -4,30 +4,17 @@ analysis.py — Analyse acoustique rule-based
 from acoustics import compute_modes, room_mode_frequency, speaker_coupling
 
 SPEED_OF_SOUND = 343.0
-MAX_WALL_DIST = 1.0   # règle : enceinte à max 1m d'un mur
-MIN_WALL_DIST = 0.3   # règle : enceinte à min 30cm d'un mur
-
-
-def wall_distance(x, y, Lx, Ly):
-    """Distance minimale à n'importe quel mur (utilisée pour la règle min 30cm)."""
-    return min(x, Lx - x, y, Ly - y)
-
-
-def y_wall_distance(y, Ly):
-    """Distance au mur de largeur le plus proche (axe Y — front/arrière).
-    La règle max 1m s'applique à cet axe : les enceintes doivent être
-    proches d'un mur de largeur, pas d'un mur de côté."""
-    return min(y, Ly - y)
 
 
 def is_valid_speaker_pos(x, y, Lx, Ly):
     """
-    Position valide si (règle purement sur l'axe Y, peu importe X) :
-    - à plus de 30cm d'un mur de largeur Y (MIN_WALL_DIST)
-    - à moins de 1m d'un mur de largeur Y (MAX_WALL_DIST)
+    Position valide si :
+    - Règle 1 : min(x, Lx-x, y, Ly-y) >= 0.3  (au moins 30cm de tout mur)
+    - Règle 2 : min(x, Lx-x) <= 1.0            (à moins de 1m d'un mur latéral X)
     """
-    d_y = y_wall_distance(y, Ly)
-    return MIN_WALL_DIST <= d_y <= MAX_WALL_DIST
+    too_close = min(x, Lx - x, y, Ly - y) < 0.3
+    too_far_lateral = min(x, Lx - x) > 1.0
+    return not too_close and not too_far_lateral
 
 
 def compute_weighted_coupling(sx, sy, modes, Lx, Ly):
@@ -177,40 +164,25 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
             continue
 
         c = speaker_coupling(s["x"], s["y"], m, n, Lx, Ly)
-        wd = wall_distance(s["x"], s["y"], Lx, Ly)       # dist min à tout mur
-        wd_y = y_wall_distance(s["y"], Ly)                # dist au mur de largeur (Y)
-        wd_cm = int(wd * 100)
-        wd_y_cm = int(wd_y * 100)
+        wall_cm = int(min(s["x"], Lx - s["x"], s["y"], Ly - s["y"]) * 100)
+        lateral_cm = int(min(s["x"], Lx - s["x"]) * 100)
         pos_str = f"({fmt_cm(s['x'])}, {fmt_cm(s['y'])})"
 
-        # ── Règle distance mur Y ───────────────────────────────────────
-        if wd_y < MIN_WALL_DIST:
+        # ── Règle 1 : distance minimale à tout mur (30cm) ─────────────
+        if min(s["x"], Lx - s["x"], s["y"], Ly - s["y"]) < 0.3:
             problems.append(
-                f"⚠️ {label} {pos_str} : trop proche d'un mur de largeur ({wd_y_cm}cm). "
-                "Amplification des graves d'environ +6 dB — son boomy et non contrôlé."
+                f"⚠️ {label} {pos_str} trop proche d'un mur ({wall_cm}cm) — minimum 30cm de tout mur."
             )
-            recommendations.append(f"Éloigner {label} à 30–100cm d'un mur de largeur (axe Y).")
-            priorities.append(f"{label} trop proche du mur Y ({wd_y_cm}cm)")
+            priorities.append(f"{label} trop proche d'un mur ({wall_cm}cm)")
 
-        elif wd_y > MAX_WALL_DIST:
-            # Trop loin des murs de LARGEUR (axe Y) — règle acoustique principale
+        # ── Règle 2 : distance maximale aux murs latéraux X (1m) ──────
+        elif min(s["x"], Lx - s["x"]) > 1.0:
             problems.append(
-                f"⚠️ {label} {pos_str} : trop loin des murs de largeur ({wd_y_cm}cm). "
-                f"La règle impose max {int(MAX_WALL_DIST*100)}cm d'un mur de largeur — "
-                "les basses perdent leur soutien acoustique."
-            )
-            # Suggérer 60cm du mur Y le plus proche
-            if s["y"] <= Ly / 2:
-                sx, sy = round(s["x"], 1), 0.6
-                mur = "avant"
-            else:
-                sx, sy = round(s["x"], 1), round(Ly - 0.6, 1)
-                mur = "arrière"
-            recommendations.append(
-                f"Rapprocher {label} du mur {mur} (largeur) → Y={sy:.1f}m (60cm du mur)."
+                f"⚠️ {label} {pos_str} trop loin des murs latéraux ({lateral_cm}cm) — "
+                "doit être à moins de 1m du mur gauche ou droit."
             )
             priorities.append(
-                f"{label} trop loin des murs de largeur ({wd_y_cm}cm) — doit être à moins de 1m d'un mur de largeur"
+                f"{label} trop loin des murs latéraux ({lateral_cm}cm)"
             )
 
         # ── Règle couplage avec le mode ────────────────────────────────
