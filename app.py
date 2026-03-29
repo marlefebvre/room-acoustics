@@ -360,7 +360,7 @@ app.layout = html.Div([
         ], className="info-modal-card"),
     ], id="info-modal", className="info-modal-overlay", style={"display": "none"}),
 
-    html.Footer("v1.10.0", className="app-version"),
+    html.Footer("v1.11.0", className="app-version"),
 
 ], className="container")
 
@@ -651,16 +651,18 @@ def update_room_points(clickData, close, undo, clear, store):
             return {"points": store["points"], "closed": True}
         return store
 
-    if "graph-room-editor" in trigger and clickData and not store["closed"]:
+    if "graph-room-editor" in trigger and clickData:
+        if store["closed"]:
+            return no_update  # pièce fermée : le clic place une enceinte, pas un mur
         x = round(clickData["points"][0]["x"], 1)
         y = round(clickData["points"][0]["y"], 1)
         # Évite les doublons
         if store["points"] and store["points"][-1] == {"x": x, "y": y}:
-            return store
+            return no_update
         pts = store["points"] + [{"x": x, "y": y}]
         return {"points": pts, "closed": False}
 
-    return store
+    return no_update
 
 
 @app.callback(
