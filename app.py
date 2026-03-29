@@ -212,7 +212,7 @@ app.layout = html.Div([
 
             html.Div([
                 html.H3("État de la pièce"),
-                dcc.Loading(type="circle", color=AMBER, children=html.Div(id="room-info")),
+                html.Div(id="room-info"),
                 html.H3("Enceintes", style={"marginTop": "14px"}),
                 html.P("Cliquer sur le plan après avoir fermé la pièce.", className="hint"),
                 html.Div(id="speaker-info-v2"),
@@ -286,6 +286,7 @@ app.layout = html.Div([
     dcc.Store(id="room-points-store", data={"points": [], "closed": False}),
     dcc.Store(id="speakers-store-v2", data={"s1": None, "s2": None}),
     dcc.Store(id="rooms-library-store", data=[]),
+    dcc.Store(id="fdm-overlay-store", data="hidden"),
     dcc.Store(id="tutorial-seen", storage_type="local", data=False),
     dcc.Store(id="tutorial-step", data=-1),
 
@@ -304,6 +305,15 @@ app.layout = html.Div([
             ], className="tutorial-actions"),
         ], className="tutorial-card"),
     ], id="tutorial-overlay", style={"display": "none"}),
+
+    # ── FDM Overlay ───────────────────────────────────────────────────
+    html.Div([
+        html.Div([
+            html.Div(id="fdm-overlay-content"),
+            html.Button("✓ Fermer", id="btn-fdm-close", className="btn",
+                        style={"display": "none", "marginTop": "20px"}),
+        ], className="fdm-overlay-card"),
+    ], id="fdm-overlay", style={"display": "none"}),
 
     # ── Modal "Comment ça marche" ──────────────────────────────────────
     html.Div([
@@ -349,7 +359,7 @@ app.layout = html.Div([
         ], className="info-modal-card"),
     ], id="info-modal", className="info-modal-overlay", style={"display": "none"}),
 
-    html.Footer("v1.8.0", className="app-version"),
+    html.Footer("v1.9.0", className="app-version"),
 
 ], className="container")
 
@@ -738,13 +748,6 @@ def update_room_info(store):
         if is_complex_shape(pts):
             info.append(html.P("⚠️ Forme complexe : calcul acoustique basé sur la bounding box (approximation).",
                                style={"color":AMBER,"fontSize":"0.78rem"}))
-        info.append(html.Div([
-            html.P("⚙️ Discrétisation du polygone sur grille 25pts/m..."),
-            html.P("🔢 Construction matrice Laplacien creuse (conditions Neumann)..."),
-            html.P("🧮 Décomposition en valeurs propres — équation de Helmholtz..."),
-            html.P("📊 Reconstruction des champs de pression par mode..."),
-            html.P("🎵 Classification axial / tangentiel / oblique..."),
-        ], className="fdm-progress"))
     else:
         info.append(html.P("Cliquer pour ajouter des points, puis 'Fermer la pièce'.", style={"color":"#9A948E"}))
     return html.Div(info)
@@ -1250,6 +1253,77 @@ app.clientside_callback(
     Output("tutorial-hl-dummy", "children"),
     Input("tutorial-step", "data"),
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FDM Overlay — Callbacks
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.callback(
+    Output("fdm-overlay-store", "data"),
+    Input("room-points-store", "data"),
+    prevent_initial_call=True,
+)
+def fdm_overlay_start(room):
+    """Déclenche l'overlay immédiatement quand la pièce est fermée."""
+    if room["closed"]:
+        return "computing"
+    return "hidden"
+
+
+@app.callback(
+    Output("fdm-overlay-store", "data", allow_duplicate=True),
+    Input("room-points-store", "data"),
+    State("lz2", "value"),
+    prevent_initial_call=True,
+)
+def fdm_overlay_compute(room, Lz):
+    """Lance le calcul FDM et marque 'done' quand terminé."""
+    if not room["closed"]:
+        return no_update
+    get_fdm_modes_cached(room["points"], Lz or 2.5)
+    return "done"
+
+
+@app.callback(
+    Output("fdm-overlay-store", "data", allow_duplicate=True),
+    Input("btn-fdm-close", "n_clicks"),
+    prevent_initial_call=True,
+)
+def fdm_overlay_close(_):
+    return "hidden"
+
+
+@app.callback(
+    Output("fdm-overlay", "style"),
+    Output("fdm-overlay-content", "children"),
+    Output("btn-fdm-close", "style"),
+    Input("fdm-overlay-store", "data"),
+)
+def fdm_overlay_display(status):
+    hidden = {"display": "none"}
+    shown = {"display": "flex"}
+    btn_hidden = {"display": "none", "marginTop": "20px"}
+    btn_shown = {"display": "block", "marginTop": "20px"}
+    if status == "computing":
+        content = html.Div([
+            html.P("⚙️ Discrétisation du polygone sur grille 25pts/m..."),
+            html.P("🔢 Construction matrice Laplacien creuse (conditions Neumann)..."),
+            html.P("🧮 Décomposition en valeurs propres — équation de Helmholtz..."),
+            html.P("📊 Reconstruction des champs de pression par mode..."),
+            html.P("🎵 Classification axial / tangentiel / oblique..."),
+        ], className="fdm-progress")
+        return shown, content, btn_hidden
+    if status == "done":
+        content = html.Div([
+            html.P("✅", style={"fontSize": "2.5rem", "margin": "0 0 8px"}),
+            html.H4("Calcul terminé", style={"color": "#166534", "margin": "0 0 8px",
+                                              "fontFamily": "'DM Serif Display', Georgia, serif"}),
+            html.P("Les modes de résonance ont été calculés pour cette pièce.",
+                   style={"color": "#6B6560", "fontSize": "0.88rem"}),
+        ])
+        return shown, content, btn_shown
+    return hidden, no_update, btn_hidden
 
 
 @app.callback(
