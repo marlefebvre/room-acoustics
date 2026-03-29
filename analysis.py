@@ -5,6 +5,13 @@ from acoustics import compute_modes, room_mode_frequency, speaker_coupling
 
 SPEED_OF_SOUND = 343.0
 
+MIN_WALL_DIST = 0.3
+MAX_WALL_DIST = 1.0
+
+
+def wall_distance(x, y, Lx, Ly):
+    return min(x, Lx - x, y, Ly - y)
+
 
 def compute_min_speaker_distance(Lx, Ly):
     area = Lx * Ly
