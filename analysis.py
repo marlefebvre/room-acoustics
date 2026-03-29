@@ -6,6 +6,13 @@ from acoustics import compute_modes, room_mode_frequency, speaker_coupling
 SPEED_OF_SOUND = 343.0
 
 
+def compute_min_speaker_distance(Lx, Ly):
+    area = Lx * Ly
+    if area < 15:   return 1.5
+    elif area < 25: return 2.0
+    else:           return 2.5
+
+
 def is_valid_speaker_pos(x, y, Lx, Ly):
     """
     Position valide si :
@@ -87,7 +94,7 @@ def fmt_cm(val_m):
     return f"{val_m:.1f}m ({int(round(val_m * 100))}cm)"
 
 
-def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
+def analyse_room(Lx, Ly, Lz, m, n, p, speakers, listening_zone=None):
     problems, impacts, recommendations = [], [], []
     priorities = []
     suggestions = {}
@@ -231,12 +238,54 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
     # ── Distance inter-enceintes ───────────────────────────────────────
     if s1 and s2:
         dist = ((s1["x"]-s2["x"])**2 + (s1["y"]-s2["y"])**2) ** 0.5
-        if dist < 1.0:
+        area = Lx * Ly
+        min_dist = compute_min_speaker_distance(Lx, Ly)
+        dist_cm = int(dist * 100)
+        if dist < min_dist:
             problems.append(
-                f"⚠️ Enceintes trop proches ({int(dist*100)}cm) — image stéréo inexistante. "
-                "Minimum recommandé : 1.5m entre les deux."
+                f"⚠️ Enceintes trop proches ({dist_cm}cm) — pour {area:.0f}m², "
+                f"distance minimale : {min_dist:.1f}m (triangle équilatéral avec zone d'écoute)"
             )
-            priorities.append(f"Enceintes trop proches ({int(dist*100)}cm)")
+            priorities.append(f"Enceintes trop proches ({dist_cm}cm)")
+
+    # ── Zone d'écoute ─────────────────────────────────────────────────
+    if listening_zone and listening_zone.get("active") and s1 and s2:
+        import math
+        zx = listening_zone.get("x") or Lx / 2
+        zy = listening_zone.get("y") or Ly / 2
+
+        # A. Pression à la zone d'écoute
+        if freq > 0:
+            import numpy as np
+            Px = np.cos(m * np.pi * zx / Lx) if m > 0 else 1.0
+            Py = np.cos(n * np.pi * zy / Ly) if n > 0 else 1.0
+            p_listen = float(Px * Py)
+            if abs(p_listen) < 0.2:
+                impacts.append(
+                    "✅ Zone d'écoute dans un nœud — ce mode sera peu audible à votre position"
+                )
+            elif abs(p_listen) > 0.8:
+                problems.append(
+                    "🔴 Zone d'écoute dans un ventre de pression — ce mode sera très audible"
+                )
+            else:
+                impacts.append(
+                    f"🟡 Zone d'écoute en pression intermédiaire ({abs(p_listen):.2f})"
+                )
+
+        # B. Symétrie par rapport à la zone
+        dist_A = math.hypot(s1["x"] - zx, s1["y"] - zy)
+        dist_B = math.hypot(s2["x"] - zx, s2["y"] - zy)
+        if abs(dist_A - dist_B) > 0.3:
+            diff_cm = int(abs(dist_A - dist_B) * 100)
+            closer = "A" if dist_A < dist_B else "B"
+            problems.append(
+                f"⚠️ Asymétrie par rapport à la zone d'écoute : enceinte {closer} est "
+                f"{diff_cm}cm plus proche — image stéréo décentrée."
+            )
+            recommendations.append(
+                "Repositionner les enceintes symétriquement par rapport au centre d'écoute."
+            )
 
     # ── Recommandations générales ──────────────────────────────────────
     recommendations.append(

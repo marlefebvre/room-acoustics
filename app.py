@@ -132,6 +132,34 @@ app.layout = html.Div([
                 html.Button("↺ Réinitialiser", id="reset-btn", className="btn btn-outline"),
             ], className="control-section"),
 
+            html.Div([
+                html.H3("Zone d'écoute"),
+                html.Button("🎧 Activer la zone d'écoute", id="btn-toggle-listen",
+                            className="btn btn-outline", n_clicks=0),
+                html.Div([
+                    html.Div([
+                        html.Div([html.Span("Centre X"), html.Span(id="val-listen-cx", className="slider-value")], className="slider-label"),
+                        dcc.Slider(id="listen-cx", min=0, max=15, step=0.1, value=3.0,
+                                   marks={i: f"{i}m" for i in range(0, 16, 3)}, tooltip={"placement": "bottom"}),
+                    ], className="slider-row"),
+                    html.Div([
+                        html.Div([html.Span("Centre Y"), html.Span(id="val-listen-cy", className="slider-value")], className="slider-label"),
+                        dcc.Slider(id="listen-cy", min=0, max=15, step=0.1, value=2.0,
+                                   marks={i: f"{i}m" for i in range(0, 16, 3)}, tooltip={"placement": "bottom"}),
+                    ], className="slider-row"),
+                    html.Div([
+                        html.Div([html.Span("Largeur"), html.Span(id="val-listen-w", className="slider-value")], className="slider-label"),
+                        dcc.Slider(id="listen-w", min=0.5, max=3.0, step=0.1, value=1.5,
+                                   marks={0.5:"0.5m",1:"1m",1.5:"1.5m",2:"2m",2.5:"2.5m",3:"3m"}, tooltip={"placement": "bottom"}),
+                    ], className="slider-row"),
+                    html.Div([
+                        html.Div([html.Span("Profondeur"), html.Span(id="val-listen-d", className="slider-value")], className="slider-label"),
+                        dcc.Slider(id="listen-d", min=0.5, max=2.0, step=0.1, value=1.0,
+                                   marks={0.5:"0.5m",1:"1m",1.5:"1.5m",2:"2m"}, tooltip={"placement": "bottom"}),
+                    ], className="slider-row"),
+                ], id="listen-sliders-container", style={"display": "none", "marginTop": "12px"}),
+            ], className="control-section"),
+
         ], className="controls"),
 
         html.Div([
@@ -261,6 +289,7 @@ app.layout = html.Div([
     dcc.Store(id="room-points-store", data={"points": [], "closed": False}),
     dcc.Store(id="speakers-store-v2", data={"s1": None, "s2": None}),
     dcc.Store(id="rooms-library-store", data=[]),
+    dcc.Store(id="listening-zone-store", data={"x": 3.0, "y": 2.0, "w": 1.5, "d": 1.0, "active": False}),
     dcc.Store(id="tutorial-seen", storage_type="local", data=False),
     dcc.Store(id="tutorial-step", data=-1),
 
@@ -280,7 +309,7 @@ app.layout = html.Div([
         ], className="tutorial-card"),
     ], id="tutorial-overlay", style={"display": "none"}),
 
-    html.Footer("v1.5.0", className="app-version"),
+    html.Footer("v1.6.0", className="app-version"),
 
 ], className="container")
 
@@ -383,8 +412,9 @@ def spk_info(spk, m, n, Lx, Ly):
     Input("mode-m","value"), Input("mode-n","value"),
     Input("lx","value"), Input("ly","value"),
     Input("speakers-store","data"), Input("suggestions-store","data"),
+    Input("listening-zone-store","data"),
 )
-def graph2d(m, n, Lx, Ly, spk, sugg):
+def graph2d(m, n, Lx, Ly, spk, sugg, listen_zone):
     X, Y, P = pressure_field_2d(m, n, Lx, Ly, resolution=120)
     fig = go.Figure()
     fig.add_trace(go.Heatmap(z=P, x=X[0], y=Y[:,0],
@@ -420,6 +450,25 @@ def graph2d(m, n, Lx, Ly, spk, sugg):
             marker=dict(size=30, color=WHITE, line=dict(width=3, color=AMBER)),
             name="Enceinte B",
             hovertemplate=f"Enceinte B<br>X={s2['x']:.1f}m ({int(s2['x']*100)}cm)<br>Y={s2['y']:.1f}m ({int(s2['y']*100)}cm)<extra></extra>"))
+
+    if listen_zone and listen_zone.get("active"):
+        zx = listen_zone["x"]
+        zy = listen_zone["y"]
+        hw = listen_zone["w"] / 2
+        hd = listen_zone["d"] / 2
+        rx = [zx-hw, zx+hw, zx+hw, zx-hw, zx-hw]
+        ry = [zy-hd, zy-hd, zy+hd, zy+hd, zy-hd]
+        fig.add_trace(go.Scatter(
+            x=rx, y=ry, fill="toself",
+            fillcolor="rgba(180,83,9,0.08)",
+            line=dict(color=AMBER, width=2, dash="dash"),
+            mode="lines", name="Zone d'écoute", hoverinfo="skip"))
+        fig.add_trace(go.Scatter(
+            x=[zx], y=[zy], mode="markers+text",
+            text=["🎧 Écoute"], textposition="top center",
+            textfont=dict(size=11, color=AMBER),
+            marker=dict(size=8, color=AMBER),
+            name="Centre écoute", hoverinfo="skip"))
 
     fig.update_layout(
         xaxis_title="X (m)", yaxis_title="Y (m)",
@@ -494,10 +543,11 @@ def modes_table(Lx, Ly, Lz):
     State("lx","value"), State("ly","value"), State("lz","value"),
     State("mode-m","value"), State("mode-n","value"), State("mode-p","value"),
     State("speakers-store","data"),
+    State("listening-zone-store","data"),
     prevent_initial_call=True,
 )
-def run_analysis(_, Lx, Ly, Lz, m, n, p, spk):
-    result = analyse_room(Lx, Ly, Lz, m, n, p, spk)
+def run_analysis(_, Lx, Ly, Lz, m, n, p, spk, listen_zone):
+    result = analyse_room(Lx, Ly, Lz, m, n, p, spk, listening_zone=listen_zone)
     conclusion = html.Div([
         html.Strong("⚡ Corrections prioritaires"),
         html.Ul([html.Li(pr) for pr in result["priorities"]], style={"marginTop":"8px","paddingLeft":"18px"}),
@@ -516,6 +566,54 @@ def run_analysis(_, Lx, Ly, Lz, m, n, p, spk):
     ], className="analyse-grid")
 
     return html.Div([conclusion, grid]), result.get("suggestions", {})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Zone d'écoute — Callbacks
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.callback(
+    Output("listening-zone-store", "data"),
+    Output("listen-sliders-container", "style"),
+    Output("btn-toggle-listen", "className"),
+    Input("btn-toggle-listen", "n_clicks"),
+    Input("listen-cx", "value"),
+    Input("listen-cy", "value"),
+    Input("listen-w", "value"),
+    Input("listen-d", "value"),
+    State("listening-zone-store", "data"),
+    prevent_initial_call=True,
+)
+def manage_listen_zone(toggle_n, cx, cy, w, d, store):
+    trigger = callback_context.triggered[0]["prop_id"]
+    data = dict(store)
+    if "btn-toggle-listen" in trigger:
+        data["active"] = not data["active"]
+    else:
+        data["x"] = cx
+        data["y"] = cy
+        data["w"] = w
+        data["d"] = d
+    shown = {"display": "block", "marginTop": "12px"} if data["active"] else {"display": "none", "marginTop": "12px"}
+    btn_cls = "btn" if data["active"] else "btn btn-outline"
+    return data, shown, btn_cls
+
+
+@app.callback(
+    Output("val-listen-cx", "children"), Input("listen-cx", "value"))
+def v_listen_cx(v): return f"{v:.1f} m"
+
+@app.callback(
+    Output("val-listen-cy", "children"), Input("listen-cy", "value"))
+def v_listen_cy(v): return f"{v:.1f} m"
+
+@app.callback(
+    Output("val-listen-w", "children"), Input("listen-w", "value"))
+def v_listen_w(v): return f"{v:.1f} m"
+
+@app.callback(
+    Output("val-listen-d", "children"), Input("listen-d", "value"))
+def v_listen_d(v): return f"{v:.1f} m"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
