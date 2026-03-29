@@ -22,13 +22,12 @@ def y_wall_distance(y, Ly):
 
 def is_valid_speaker_pos(x, y, Lx, Ly):
     """
-    Position valide si :
-    - à plus de 30cm de TOUT mur (MIN_WALL_DIST) — évite l'effet de bord
-    - à moins de 1m d'un mur de LARGEUR Y (MAX_WALL_DIST) — règle acoustique
+    Position valide si (règle purement sur l'axe Y, peu importe X) :
+    - à plus de 30cm d'un mur de largeur Y (MIN_WALL_DIST)
+    - à moins de 1m d'un mur de largeur Y (MAX_WALL_DIST)
     """
-    d_min = wall_distance(x, y, Lx, Ly)
     d_y = y_wall_distance(y, Ly)
-    return d_min >= MIN_WALL_DIST and d_y <= MAX_WALL_DIST
+    return MIN_WALL_DIST <= d_y <= MAX_WALL_DIST
 
 
 def suggest_speaker_position(s, m, n, Lx, Ly, step=0.1, max_move=1.0):
@@ -166,14 +165,14 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
         wd_y_cm = int(wd_y * 100)
         pos_str = f"({fmt_cm(s['x'])}, {fmt_cm(s['y'])})"
 
-        # ── Règle distance mur ─────────────────────────────────────────
-        if wd < MIN_WALL_DIST:
+        # ── Règle distance mur Y ───────────────────────────────────────
+        if wd_y < MIN_WALL_DIST:
             problems.append(
-                f"⚠️ {label} {pos_str} : trop proche d'un mur ({wd_cm}cm). "
+                f"⚠️ {label} {pos_str} : trop proche d'un mur de largeur ({wd_y_cm}cm). "
                 "Amplification des graves d'environ +6 dB — son boomy et non contrôlé."
             )
-            recommendations.append(f"Éloigner {label} à 30–100cm du mur.")
-            priorities.append(f"{label} trop proche du mur ({wd_cm}cm)")
+            recommendations.append(f"Éloigner {label} à 30–100cm d'un mur de largeur (axe Y).")
+            priorities.append(f"{label} trop proche du mur Y ({wd_y_cm}cm)")
 
         elif wd_y > MAX_WALL_DIST:
             # Trop loin des murs de LARGEUR (axe Y) — règle acoustique principale

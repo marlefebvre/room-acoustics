@@ -320,6 +320,15 @@ body {
     background: #FEF3E2 !important;
 }
 
+/* ── Version ── */
+.app-version {
+    text-align: center;
+    font-size: 0.7rem;
+    color: #C4BFB8;
+    padding: 24px 0 8px;
+    letter-spacing: 0.5px;
+}
+
 /* ── Tutorial ── */
 .tutorial-help-btn {
     position: fixed;
