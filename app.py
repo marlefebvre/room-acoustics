@@ -19,30 +19,6 @@ from polygon_acoustics import get_fdm_modes_cached, pressure_field_polygon, spea
 app = dash.Dash(__name__, title="Room Acoustics")
 
 
-def speaker_badge(label):
-    if label == "A":
-        return html.Span(label, style={
-            "background": "#B45309", "color": "white",
-            "borderRadius": "50%", "width": "22px", "height": "22px",
-            "display": "inline-flex", "alignItems": "center",
-            "justifyContent": "center", "fontWeight": "900",
-            "fontSize": "11px", "marginRight": "8px",
-            "fontFamily": "Arial Black, sans-serif",
-            "flexShrink": "0", "border": "2px solid white",
-            "boxShadow": "0 0 0 1.5px #B45309",
-        })
-    else:
-        return html.Span(label, style={
-            "background": "white", "color": "#1A1814",
-            "borderRadius": "50%", "width": "22px", "height": "22px",
-            "display": "inline-flex", "alignItems": "center",
-            "justifyContent": "center", "fontWeight": "900",
-            "fontSize": "11px", "marginRight": "8px",
-            "fontFamily": "Arial Black, sans-serif",
-            "flexShrink": "0", "border": "2.5px solid #B45309",
-        })
-
-
 @app.server.route("/load-rooms", methods=["GET"])
 def route_load_rooms():
     return jsonify(_load_library())
@@ -99,7 +75,6 @@ app.layout = html.Div([
         html.H1(["Room ", html.Em("Acoustics"), " — Modes de résonance"], className="title"),
     ], style={"position": "relative"}),
     html.Button("?", id="tutorial-btn", className="tutorial-help-btn", title="Lancer le tutoriel", n_clicks=0),
-    html.Button("ℹ", id="btn-info-modal", className="info-modal-btn", title="Comment ça marche ?", n_clicks=0),
 
     # ── Onglets V1 / V2 ──────────────────────────────────────────────────
     html.Div([
@@ -286,7 +261,6 @@ app.layout = html.Div([
     dcc.Store(id="room-points-store", data={"points": [], "closed": False}),
     dcc.Store(id="speakers-store-v2", data={"s1": None, "s2": None}),
     dcc.Store(id="rooms-library-store", data=[]),
-    dcc.Store(id="fdm-overlay-store", data="hidden"),
     dcc.Store(id="tutorial-seen", storage_type="local", data=False),
     dcc.Store(id="tutorial-step", data=-1),
 
@@ -306,61 +280,7 @@ app.layout = html.Div([
         ], className="tutorial-card"),
     ], id="tutorial-overlay", style={"display": "none"}),
 
-    # ── FDM Overlay ───────────────────────────────────────────────────
-    html.Div([
-        html.Div([
-            html.Div(id="fdm-instant-dummy", style={"display": "none"}),
-    html.Div(id="fdm-overlay-content"),
-            html.Button("✓ Fermer", id="btn-fdm-close", className="btn",
-                        style={"display": "none", "marginTop": "20px"}),
-        ], className="fdm-overlay-card"),
-    ], id="fdm-overlay", style={"display": "none"}),
-
-    # ── Modal "Comment ça marche" ──────────────────────────────────────
-    html.Div([
-        html.Div([
-            html.Button("✕", id="btn-close-info-modal", className="info-modal-close"),
-            html.H3("Comment ça marche ?", style={"color": AMBER, "marginBottom": "20px", "fontFamily": "'DM Serif Display', Georgia, serif"}),
-
-            html.H4("📐 Modes de résonance — Pièce rectangulaire", className="info-section-title"),
-            html.P("Dans une pièce rectangulaire aux parois rigides, les ondes sonores se réfléchissent et interfèrent pour créer des ondes stationnaires à des fréquences précises : les modes de résonance."),
-            html.P("La fréquence de chaque mode est calculée par la formule analytique exacte :"),
-            html.Div("f(m,n,p) = c/2 × √( (m/Lx)² + (n/Ly)² + (p/Lz)² )", className="math-formula"),
-            html.P("où c = 343 m/s (vitesse du son), m/n/p sont les indices du mode (nombre de demi-longueurs d'onde dans chaque dimension), et Lx, Ly, Lz sont les dimensions de la pièce."),
-            html.P("Les modes sont classés en 3 types :"),
-            html.Ul([
-                html.Li("Axial ★★★ : un seul indice non nul — onde entre 2 murs parallèles. Le plus énergétique, le plus problématique."),
-                html.Li("Tangentiel ★★☆ : deux indices non nuls — onde entre 4 murs. Énergie modérée."),
-                html.Li("Oblique ★☆☆ : trois indices non nuls — onde impliquant les 6 surfaces. Faible impact."),
-            ], style={"paddingLeft": "18px", "lineHeight": "1.9"}),
-
-            html.H4("🌊 Champ de pression acoustique", className="info-section-title"),
-            html.P("Le champ de pression d'un mode est la distribution spatiale de la pression sonore dans la pièce. Pour une pièce rectangulaire avec conditions de Neumann (murs rigides, vitesse normale nulle) :"),
-            html.Div("P(x,y,z) = cos(mπx/Lx) × cos(nπy/Ly) × cos(pπz/Lz)", className="math-formula"),
-            html.P("Les zones rouges (ventres) sont des maxima de pression — l'onde est forte. Les zones bleues (nœuds) sont des minima — l'onde s'annule."),
-            html.P("Une enceinte placée dans un ventre excite fortement ce mode (couplage fort). Une enceinte dans un nœud ne l'excite pas (couplage faible = idéal)."),
-
-            html.H4("🔬 Calcul FDM — Pièces de forme complexe", className="info-section-title"),
-            html.P("Pour les pièces non rectangulaires (L, T, polygones), la formule analytique ne s'applique plus. L'application utilise la méthode des Différences Finies (FDM) pour résoudre numériquement l'équation de Helmholtz 2D :"),
-            html.Div("∇²p + k²p = 0    dans le domaine Ω (polygone)", className="math-formula"),
-            html.Div("∂p/∂n = 0        sur ∂Ω (murs rigides — condition de Neumann)", className="math-formula"),
-            html.P("Le Laplacien ∇² est discrétisé sur une grille de 25 points/mètre avec un schéma aux différences finies à 5 points. Cela produit une matrice creuse L de taille N×N (N = nombre de points intérieurs)."),
-            html.P("Le problème devient alors un problème aux valeurs propres :"),
-            html.Div("L·v = -k²·v", className="math-formula"),
-            html.P("Résolu avec scipy.sparse.linalg.eigsh (algorithme d'Arnoldi-Lanczos). Les fréquences propres sont : f = (c/2π) × √k²"),
-            html.P("Précision : ~1–2% par rapport à la solution analytique pour une pièce rectangulaire (validé en interne)."),
-
-            html.H4("🎯 Optimisation du placement des enceintes", className="info-section-title"),
-            html.P("Le couplage d'une enceinte avec un mode mesure à quel point elle excite cette résonance. Pour une pièce rectangulaire :"),
-            html.Div("Couplage(x,y) = |cos(mπx/Lx) × cos(nπy/Ly)|", className="math-formula"),
-            html.P("Valeur entre 0 (nœud — idéal) et 1 (ventre — problématique)."),
-            html.P("L'optimisation recherche la position minimisant un couplage moyen pondéré sur les 3 premiers modes axials (les plus énergétiques) :"),
-            html.Div("C_pondéré = Σ (couplage_i / freq_i) / Σ (1/freq_i)", className="math-formula"),
-            html.P("La pondération par 1/fréquence donne plus de poids aux modes graves (plus problématiques perceptivement). La recherche est contrainte à ±1m autour de la position actuelle, avec min 30cm et max 1m de tout mur latéral."),
-        ], className="info-modal-card"),
-    ], id="info-modal", className="info-modal-overlay", style={"display": "none"}),
-
-    html.Footer("v1.12.0", className="app-version"),
+    html.Footer("v1.5.0", className="app-version"),
 
 ], className="container")
 
@@ -447,20 +367,14 @@ def update_speakers(clickData, reset, spk):
 )
 def spk_info(spk, m, n, Lx, Ly):
     items = []
-    for label, key in [("A","s1"), ("B","s2")]:
+    for label, key, icon in [("Enceinte A","s1","🔶"), ("Enceinte B","s2","⚫")]:
         s = spk.get(key)
         if s:
             c = speaker_coupling(s["x"], s["y"], m, n, Lx, Ly)
             q = "Fort ⚠️" if c > 0.7 else ("Moyen" if c > 0.3 else "Faible ✅")
-            items.append(html.Div([
-                speaker_badge(label),
-                html.Span(f"Enceinte {label}  X={s['x']:.1f}m ({int(s['x']*100)}cm)  Y={s['y']:.1f}m ({int(s['y']*100)}cm)  {q}"),
-            ], style={"display":"flex","alignItems":"center","marginBottom":"6px"}))
+            items.append(html.P(f"{icon} {label}  X={s['x']:.1f}m ({int(s['x']*100)}cm)  Y={s['y']:.1f}m ({int(s['y']*100)}cm)  {q}"))
         else:
-            items.append(html.Div([
-                speaker_badge(label),
-                html.Span(f"Enceinte {label} — non placée", style={"color":"#9A948E"}),
-            ], style={"display":"flex","alignItems":"center","marginBottom":"6px"}))
+            items.append(html.P(f"{icon} {label} — non placée", style={"color":"#9A948E"}))
     return items
 
 
@@ -506,7 +420,6 @@ def graph2d(m, n, Lx, Ly, spk, sugg):
             marker=dict(size=30, color=WHITE, line=dict(width=3, color=AMBER)),
             name="Enceinte B",
             hovertemplate=f"Enceinte B<br>X={s2['x']:.1f}m ({int(s2['x']*100)}cm)<br>Y={s2['y']:.1f}m ({int(s2['y']*100)}cm)<extra></extra>"))
-
 
     fig.update_layout(
         xaxis_title="X (m)", yaxis_title="Y (m)",
@@ -651,18 +564,16 @@ def update_room_points(clickData, close, undo, clear, store):
             return {"points": store["points"], "closed": True}
         return store
 
-    if "graph-room-editor" in trigger and clickData:
-        if store["closed"]:
-            return no_update  # pièce fermée : le clic place une enceinte, pas un mur
+    if "graph-room-editor" in trigger and clickData and not store["closed"]:
         x = round(clickData["points"][0]["x"], 1)
         y = round(clickData["points"][0]["y"], 1)
         # Évite les doublons
         if store["points"] and store["points"][-1] == {"x": x, "y": y}:
-            return no_update
+            return store
         pts = store["points"] + [{"x": x, "y": y}]
         return {"points": pts, "closed": False}
 
-    return no_update
+    return store
 
 
 @app.callback(
@@ -744,10 +655,11 @@ def update_room_info(store):
         Lx, Ly = polygon_bounding_box(pts)
         area = polygon_area(pts)
         info += [
-            html.P("✅ Pièce fermée", style={"color":"#166534","fontWeight":"600"}),
+            html.P(f"✅ Pièce fermée", style={"color":"#166534","fontWeight":"600"}),
             html.P(f"Bounding box : {Lx:.1f}m × {Ly:.1f}m"),
             html.P(f"Surface réelle : {area:.1f} m²"),
         ]
+        from room_editor import is_complex_shape
         if is_complex_shape(pts):
             info.append(html.P("⚠️ Forme complexe : calcul acoustique basé sur la bounding box (approximation).",
                                style={"color":AMBER,"fontSize":"0.78rem"}))
@@ -790,7 +702,7 @@ def spk_info_v2(spk, room, mode_idx, Lz):
         return html.P("Fermez d'abord la pièce.", style={"color":"#9A948E"})
     modes, fields, grid_info = get_fdm_modes_cached(room["points"], Lz)
     items = []
-    for label, key in [("A","s1"), ("B","s2")]:
+    for label, key, icon in [("Enceinte A","s1","🔶"), ("Enceinte B","s2","⚫")]:
         s = spk.get(key)
         if s:
             c = 0.0
@@ -798,15 +710,9 @@ def spk_info_v2(spk, room, mode_idx, Lz):
                 c = speaker_coupling_polygon(s["x"], s["y"], fields[int(mode_idx)],
                                              grid_info["x_grid"], grid_info["y_grid"])
             q = "Fort ⚠️" if c > 0.7 else ("Moyen" if c > 0.3 else "Faible ✅")
-            items.append(html.Div([
-                speaker_badge(label),
-                html.Span(f"Enceinte {label}  X={s['x']:.1f}m ({int(s['x']*100)}cm)  Y={s['y']:.1f}m ({int(s['y']*100)}cm)  Couplage FDM: {q}"),
-            ], style={"display":"flex","alignItems":"center","marginBottom":"6px"}))
+            items.append(html.P(f"{icon} {label}  X={s['x']:.1f}m ({int(s['x']*100)}cm)  Y={s['y']:.1f}m ({int(s['y']*100)}cm)  Couplage FDM: {q}"))
         else:
-            items.append(html.Div([
-                speaker_badge(label),
-                html.Span(f"Enceinte {label} — non placée", style={"color":"#9A948E"}),
-            ], style={"display":"flex","alignItems":"center","marginBottom":"6px"}))
+            items.append(html.P(f"{icon} {label} — non placée", style={"color":"#9A948E"}))
     return items
 
 
@@ -1256,105 +1162,6 @@ app.clientside_callback(
     Output("tutorial-hl-dummy", "children"),
     Input("tutorial-step", "data"),
 )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# FDM Overlay — Callbacks
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.callback(
-    Output("fdm-overlay-store", "data"),
-    Input("btn-close-room", "n_clicks"),
-    prevent_initial_call=True,
-)
-def fdm_overlay_start(_):
-    """Déclenche l'overlay uniquement quand le bouton Fermer la pièce est cliqué."""
-    return "computing"
-
-
-app.clientside_callback(
-    """
-    function(n) {
-        if (n) {
-            var el = document.getElementById('fdm-overlay');
-            if (el) el.style.display = 'flex';
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("fdm-instant-dummy", "children"),
-    Input("btn-close-room", "n_clicks"),
-    prevent_initial_call=True,
-)
-
-
-@app.callback(
-    Output("fdm-overlay-store", "data", allow_duplicate=True),
-    Input("room-points-store", "data"),
-    State("lz2", "value"),
-    prevent_initial_call=True,
-)
-def fdm_overlay_compute(room, Lz):
-    """Lance le calcul FDM et marque 'done' quand terminé."""
-    if not room["closed"]:
-        return no_update
-    get_fdm_modes_cached(room["points"], Lz or 2.5)
-    return "done"
-
-
-@app.callback(
-    Output("fdm-overlay-store", "data", allow_duplicate=True),
-    Input("btn-fdm-close", "n_clicks"),
-    prevent_initial_call=True,
-)
-def fdm_overlay_close(_):
-    return "hidden"
-
-
-@app.callback(
-    Output("fdm-overlay", "style"),
-    Output("fdm-overlay-content", "children"),
-    Output("btn-fdm-close", "style"),
-    Input("fdm-overlay-store", "data"),
-    prevent_initial_call=True,
-)
-def fdm_overlay_display(status):
-    hidden = {"display": "none"}
-    shown = {"display": "flex"}
-    btn_hidden = {"display": "none", "marginTop": "20px"}
-    btn_shown = {"display": "block", "marginTop": "20px"}
-    if status == "computing":
-        content = html.Div([
-            html.P("⚙️ Discrétisation du polygone sur grille 25pts/m..."),
-            html.P("🔢 Construction matrice Laplacien creuse (conditions Neumann)..."),
-            html.P("🧮 Décomposition en valeurs propres — équation de Helmholtz..."),
-            html.P("📊 Reconstruction des champs de pression par mode..."),
-            html.P("🎵 Classification axial / tangentiel / oblique..."),
-        ], className="fdm-progress")
-        return shown, content, btn_hidden
-    if status == "done":
-        content = html.Div([
-            html.P("✅", style={"fontSize": "2.5rem", "margin": "0 0 8px"}),
-            html.H4("Calcul terminé", style={"color": "#166534", "margin": "0 0 8px",
-                                              "fontFamily": "'DM Serif Display', Georgia, serif"}),
-            html.P("Les modes de résonance ont été calculés pour cette pièce.",
-                   style={"color": "#6B6560", "fontSize": "0.88rem"}),
-        ])
-        return shown, content, btn_shown
-    return hidden, no_update, btn_hidden
-
-
-@app.callback(
-    Output("info-modal", "style"),
-    Input("btn-info-modal", "n_clicks"),
-    Input("btn-close-info-modal", "n_clicks"),
-    prevent_initial_call=True,
-)
-def toggle_info_modal(open_n, close_n):
-    trigger = callback_context.triggered[0]["prop_id"]
-    if "btn-info-modal" in trigger:
-        return {"display": "flex"}
-    return {"display": "none"}
 
 
 server = app.server
