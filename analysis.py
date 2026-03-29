@@ -94,7 +94,7 @@ def fmt_cm(val_m):
     return f"{val_m:.1f}m ({int(round(val_m * 100))}cm)"
 
 
-def analyse_room(Lx, Ly, Lz, m, n, p, speakers, listening_zone=None):
+def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
     problems, impacts, recommendations = [], [], []
     priorities = []
     suggestions = {}
@@ -244,48 +244,9 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers, listening_zone=None):
         if dist < min_dist:
             problems.append(
                 f"⚠️ Enceintes trop proches ({dist_cm}cm) — pour {area:.0f}m², "
-                f"distance minimale : {min_dist:.1f}m (triangle équilatéral avec zone d'écoute)"
+                f"distance minimale : {min_dist:.1f}m (triangle équilatéral)"
             )
             priorities.append(f"Enceintes trop proches ({dist_cm}cm)")
-
-    # ── Zone d'écoute ─────────────────────────────────────────────────
-    if listening_zone and listening_zone.get("active") and s1 and s2:
-        import math
-        zx = listening_zone.get("x") or Lx / 2
-        zy = listening_zone.get("y") or Ly / 2
-
-        # A. Pression à la zone d'écoute
-        if freq > 0:
-            import numpy as np
-            Px = np.cos(m * np.pi * zx / Lx) if m > 0 else 1.0
-            Py = np.cos(n * np.pi * zy / Ly) if n > 0 else 1.0
-            p_listen = float(Px * Py)
-            if abs(p_listen) < 0.2:
-                impacts.append(
-                    "✅ Zone d'écoute dans un nœud — ce mode sera peu audible à votre position"
-                )
-            elif abs(p_listen) > 0.8:
-                problems.append(
-                    "🔴 Zone d'écoute dans un ventre de pression — ce mode sera très audible"
-                )
-            else:
-                impacts.append(
-                    f"🟡 Zone d'écoute en pression intermédiaire ({abs(p_listen):.2f})"
-                )
-
-        # B. Symétrie par rapport à la zone
-        dist_A = math.hypot(s1["x"] - zx, s1["y"] - zy)
-        dist_B = math.hypot(s2["x"] - zx, s2["y"] - zy)
-        if abs(dist_A - dist_B) > 0.3:
-            diff_cm = int(abs(dist_A - dist_B) * 100)
-            closer = "A" if dist_A < dist_B else "B"
-            problems.append(
-                f"⚠️ Asymétrie par rapport à la zone d'écoute : enceinte {closer} est "
-                f"{diff_cm}cm plus proche — image stéréo décentrée."
-            )
-            recommendations.append(
-                "Repositionner les enceintes symétriquement par rapport au centre d'écoute."
-            )
 
     # ── Recommandations générales ──────────────────────────────────────
     recommendations.append(
