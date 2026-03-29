@@ -360,7 +360,7 @@ app.layout = html.Div([
         ], className="info-modal-card"),
     ], id="info-modal", className="info-modal-overlay", style={"display": "none"}),
 
-    html.Footer("v1.11.0", className="app-version"),
+    html.Footer("v1.12.0", className="app-version"),
 
 ], className="container")
 
@@ -1316,6 +1316,7 @@ def fdm_overlay_close(_):
     Output("fdm-overlay-content", "children"),
     Output("btn-fdm-close", "style"),
     Input("fdm-overlay-store", "data"),
+    prevent_initial_call=True,
 )
 def fdm_overlay_display(status):
     hidden = {"display": "none"}
