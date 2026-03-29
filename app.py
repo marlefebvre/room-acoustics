@@ -280,7 +280,7 @@ app.layout = html.Div([
         ], className="tutorial-card"),
     ], id="tutorial-overlay", style={"display": "none"}),
 
-    html.Footer("v1.3.0", className="app-version"),
+    html.Footer("v1.4.0", className="app-version"),
 
 ], className="container")
 

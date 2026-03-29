@@ -30,17 +30,35 @@ def is_valid_speaker_pos(x, y, Lx, Ly):
     return MIN_WALL_DIST <= d_y <= MAX_WALL_DIST
 
 
-def suggest_speaker_position(s, m, n, Lx, Ly, step=0.1, max_move=1.0):
+def compute_weighted_coupling(sx, sy, modes, Lx, Ly):
+    """Couplage moyen pondéré sur les 3 modes axials les plus bas en fréquence.
+    Poids = 1/freq (les basses fréquences comptent davantage)."""
+    axials = sorted(
+        [mo for mo in modes if mo["type"] == "Axial"],
+        key=lambda mo: mo["freq"]
+    )[:3]
+    if not axials:
+        return 0.0
+    total_w = sum(1.0 / mo["freq"] for mo in axials)
+    total_c = sum(
+        speaker_coupling(sx, sy, mo["m"], mo["n"], Lx, Ly) / mo["freq"]
+        for mo in axials
+    )
+    return total_c / total_w
+
+
+def suggest_speaker_position(s, m, n, Lx, Ly, modes, step=0.1, max_move=1.0):
     """
     Cherche la meilleure position dans ±1m avec couplage minimal.
     - Si n == 0 : mode indépendant de Y → recherche sur X seulement, Y fixe
     - Si m == 0 : mode indépendant de X → recherche sur Y seulement, X fixe
     - Sinon     : recherche 2D complète
     Contrainte : position valide (30cm–1m d'un mur de largeur Y).
+    Optimise sur les 3 modes axials les plus critiques (couplage pondéré).
     """
     import numpy as np
     best_pos = None
-    best_coupling = speaker_coupling(s["x"], s["y"], m, n, Lx, Ly)
+    best_coupling = compute_weighted_coupling(s["x"], s["y"], modes, Lx, Ly)
 
     sx = round(s["x"], 1)
     sy = round(s["y"], 1)
@@ -70,7 +88,7 @@ def suggest_speaker_position(s, m, n, Lx, Ly, step=0.1, max_move=1.0):
                 continue
             if not is_valid_speaker_pos(x, y, Lx, Ly):
                 continue
-            c = speaker_coupling(x, y, m, n, Lx, Ly)
+            c = compute_weighted_coupling(x, y, modes, Lx, Ly)
             if c < best_coupling:
                 best_coupling = c
                 best_pos = (x, y)
@@ -197,7 +215,12 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
 
         # ── Règle couplage avec le mode ────────────────────────────────
         if c > 0.7 and freq > 0:
-            better, bc = suggest_speaker_position(s, m, n, Lx, Ly)
+            better, bc = suggest_speaker_position(s, m, n, Lx, Ly, modes)
+            axial_top3 = sorted(
+                [mo for mo in modes if mo["type"] == "Axial"],
+                key=lambda mo: mo["freq"]
+            )[:3]
+            axial_freqs = " / ".join(f"{mo['freq']:.0f} Hz" for mo in axial_top3)
             if better:
                 suggestions[key] = {"x": better[0], "y": better[1], "label": label}
                 dx_cm = int(round((better[0] - s["x"]) * 100))
@@ -210,8 +233,10 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
                     f"excite fortement la résonance à {freq:.0f} Hz."
                 )
                 recommendations.append(
-                    f"Déplacer {label} de {mouvement} → X={better[0]:.1f}m, Y={better[1]:.1f}m "
-                    f"(couplage {c:.2f} → {bc:.2f}). Marqueur pointillé sur le plan."
+                    f"Déplacer {label} de {mouvement} → X={better[0]:.1f}m, Y={better[1]:.1f}m — "
+                    f"position optimisée sur les 3 modes axials les plus critiques "
+                    f"({axial_freqs}) — couplage moyen pondéré réduit de {c:.2f} → {bc:.2f}. "
+                    f"Marqueur pointillé sur le plan."
                 )
                 priorities.append(
                     f"{label} : {mouvement} → ({better[0]:.1f}m, {better[1]:.1f}m)"
