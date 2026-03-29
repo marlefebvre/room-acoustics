@@ -309,7 +309,8 @@ app.layout = html.Div([
     # ── FDM Overlay ───────────────────────────────────────────────────
     html.Div([
         html.Div([
-            html.Div(id="fdm-overlay-content"),
+            html.Div(id="fdm-instant-dummy", style={"display": "none"}),
+    html.Div(id="fdm-overlay-content"),
             html.Button("✓ Fermer", id="btn-fdm-close", className="btn",
                         style={"display": "none", "marginTop": "20px"}),
         ], className="fdm-overlay-card"),
@@ -359,7 +360,7 @@ app.layout = html.Div([
         ], className="info-modal-card"),
     ], id="info-modal", className="info-modal-overlay", style={"display": "none"}),
 
-    html.Footer("v1.9.0", className="app-version"),
+    html.Footer("v1.10.0", className="app-version"),
 
 ], className="container")
 
@@ -1261,14 +1262,28 @@ app.clientside_callback(
 
 @app.callback(
     Output("fdm-overlay-store", "data"),
-    Input("room-points-store", "data"),
+    Input("btn-close-room", "n_clicks"),
     prevent_initial_call=True,
 )
-def fdm_overlay_start(room):
-    """Déclenche l'overlay immédiatement quand la pièce est fermée."""
-    if room["closed"]:
-        return "computing"
-    return "hidden"
+def fdm_overlay_start(_):
+    """Déclenche l'overlay uniquement quand le bouton Fermer la pièce est cliqué."""
+    return "computing"
+
+
+app.clientside_callback(
+    """
+    function(n) {
+        if (n) {
+            var el = document.getElementById('fdm-overlay');
+            if (el) el.style.display = 'flex';
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("fdm-instant-dummy", "children"),
+    Input("btn-close-room", "n_clicks"),
+    prevent_initial_call=True,
+)
 
 
 @app.callback(
