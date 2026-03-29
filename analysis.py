@@ -9,41 +9,66 @@ MIN_WALL_DIST = 0.3   # règle : enceinte à min 30cm d'un mur
 
 
 def wall_distance(x, y, Lx, Ly):
-    """Distance minimale à n'importe quel mur."""
+    """Distance minimale à n'importe quel mur (utilisée pour la règle min 30cm)."""
     return min(x, Lx - x, y, Ly - y)
+
+
+def y_wall_distance(y, Ly):
+    """Distance au mur de largeur le plus proche (axe Y — front/arrière).
+    La règle max 1m s'applique à cet axe : les enceintes doivent être
+    proches d'un mur de largeur, pas d'un mur de côté."""
+    return min(y, Ly - y)
 
 
 def is_valid_speaker_pos(x, y, Lx, Ly):
     """
     Position valide si :
-    - à moins de 1m d'un mur (MAX_WALL_DIST)
-    - à plus de 30cm de tout mur (MIN_WALL_DIST)
+    - à plus de 30cm de TOUT mur (MIN_WALL_DIST) — évite l'effet de bord
+    - à moins de 1m d'un mur de LARGEUR Y (MAX_WALL_DIST) — règle acoustique
     """
-    d = wall_distance(x, y, Lx, Ly)
-    return MIN_WALL_DIST <= d <= MAX_WALL_DIST
+    d_min = wall_distance(x, y, Lx, Ly)
+    d_y = y_wall_distance(y, Ly)
+    return d_min >= MIN_WALL_DIST and d_y <= MAX_WALL_DIST
 
 
 def suggest_speaker_position(s, m, n, Lx, Ly, step=0.1, max_move=1.0):
     """
-    Cherche la meilleure position dans ±1m avec :
-    - couplage minimal
-    - à 30cm–1m d'un mur (zones valides uniquement)
+    Cherche la meilleure position dans ±1m avec couplage minimal.
+    - Si n == 0 : mode indépendant de Y → recherche sur X seulement, Y fixe
+    - Si m == 0 : mode indépendant de X → recherche sur Y seulement, X fixe
+    - Sinon     : recherche 2D complète
+    Contrainte : position valide (30cm–1m d'un mur de largeur Y).
     """
     import numpy as np
     best_pos = None
     best_coupling = speaker_coupling(s["x"], s["y"], m, n, Lx, Ly)
 
-    x_min = max(step, round(s["x"] - max_move, 1))
-    x_max = min(round(Lx - step, 1), round(s["x"] + max_move, 1))
-    y_min = max(step, round(s["y"] - max_move, 1))
-    y_max = min(round(Ly - step, 1), round(s["y"] + max_move, 1))
+    sx = round(s["x"], 1)
+    sy = round(s["y"], 1)
 
-    for x in np.arange(x_min, x_max + 0.005, step):
-        for y in np.arange(y_min, y_max + 0.005, step):
+    x_min = max(step, round(sx - max_move, 1))
+    x_max = min(round(Lx - step, 1), round(sx + max_move, 1))
+    y_min = max(step, round(sy - max_move, 1))
+    y_max = min(round(Ly - step, 1), round(sy + max_move, 1))
+
+    if n == 0:
+        # Mode indépendant de Y : ne varier que X, Y reste fixe
+        xs = np.arange(x_min, x_max + 0.005, step)
+        ys = [sy]
+    elif m == 0:
+        # Mode indépendant de X : ne varier que Y, X reste fixe
+        xs = [sx]
+        ys = np.arange(y_min, y_max + 0.005, step)
+    else:
+        # Mode 2D : recherche complète
+        xs = np.arange(x_min, x_max + 0.005, step)
+        ys = np.arange(y_min, y_max + 0.005, step)
+
+    for x in xs:
+        for y in ys:
             x, y = round(x, 1), round(y, 1)
-            if x == round(s["x"], 1) and y == round(s["y"], 1):
+            if x == sx and y == sy:
                 continue
-            # CONTRAINTE : position valide (30cm–1m d'un mur)
             if not is_valid_speaker_pos(x, y, Lx, Ly):
                 continue
             c = speaker_coupling(x, y, m, n, Lx, Ly)
@@ -135,8 +160,10 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
             continue
 
         c = speaker_coupling(s["x"], s["y"], m, n, Lx, Ly)
-        wd = wall_distance(s["x"], s["y"], Lx, Ly)
+        wd = wall_distance(s["x"], s["y"], Lx, Ly)       # dist min à tout mur
+        wd_y = y_wall_distance(s["y"], Ly)                # dist au mur de largeur (Y)
         wd_cm = int(wd * 100)
+        wd_y_cm = int(wd_y * 100)
         pos_str = f"({fmt_cm(s['x'])}, {fmt_cm(s['y'])})"
 
         # ── Règle distance mur ─────────────────────────────────────────
@@ -148,22 +175,26 @@ def analyse_room(Lx, Ly, Lz, m, n, p, speakers):
             recommendations.append(f"Éloigner {label} à 30–100cm du mur.")
             priorities.append(f"{label} trop proche du mur ({wd_cm}cm)")
 
-        elif wd > MAX_WALL_DIST:
+        elif wd_y > MAX_WALL_DIST:
+            # Trop loin des murs de LARGEUR (axe Y) — règle acoustique principale
             problems.append(
-                f"⚠️ {label} {pos_str} : trop loin de tout mur ({wd_cm}cm). "
-                f"La règle impose max {int(MAX_WALL_DIST*100)}cm — les basses perdent leur soutien acoustique."
+                f"⚠️ {label} {pos_str} : trop loin des murs de largeur ({wd_y_cm}cm). "
+                f"La règle impose max {int(MAX_WALL_DIST*100)}cm d'un mur de largeur — "
+                "les basses perdent leur soutien acoustique."
             )
-            # Suggérer 60cm du mur le plus proche
-            dists = {"gauche": s["x"], "droite": Lx-s["x"], "avant": s["y"], "arrière": Ly-s["y"]}
-            nearest_wall = min(dists, key=dists.get)
-            if nearest_wall == "gauche":   sx, sy = 0.6, round(s["y"], 1)
-            elif nearest_wall == "droite": sx, sy = round(Lx-0.6, 1), round(s["y"], 1)
-            elif nearest_wall == "avant":  sx, sy = round(s["x"], 1), 0.6
-            else:                          sx, sy = round(s["x"], 1), round(Ly-0.6, 1)
+            # Suggérer 60cm du mur Y le plus proche
+            if s["y"] <= Ly / 2:
+                sx, sy = round(s["x"], 1), 0.6
+                mur = "avant"
+            else:
+                sx, sy = round(s["x"], 1), round(Ly - 0.6, 1)
+                mur = "arrière"
             recommendations.append(
-                f"Rapprocher {label} du mur {nearest_wall} → position : X={sx:.1f}m, Y={sy:.1f}m (60cm du mur)."
+                f"Rapprocher {label} du mur {mur} (largeur) → Y={sy:.1f}m (60cm du mur)."
             )
-            priorities.append(f"{label} trop loin des murs ({wd_cm}cm)")
+            priorities.append(
+                f"{label} trop loin des murs de largeur ({wd_y_cm}cm) — doit être à moins de 1m d'un mur de largeur"
+            )
 
         # ── Règle couplage avec le mode ────────────────────────────────
         if c > 0.7 and freq > 0:

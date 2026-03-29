@@ -71,7 +71,10 @@ def _save_library(data):
 
 app.layout = html.Div([
 
-    html.H1(["Room ", html.Em("Acoustics"), " — Modes de résonance"], className="title"),
+    html.Div([
+        html.H1(["Room ", html.Em("Acoustics"), " — Modes de résonance"], className="title"),
+    ], style={"position": "relative"}),
+    html.Button("?", id="tutorial-btn", className="tutorial-help-btn", title="Lancer le tutoriel", n_clicks=0),
 
     # ── Onglets V1 / V2 ──────────────────────────────────────────────────
     html.Div([
@@ -103,7 +106,7 @@ app.layout = html.Div([
                     dcc.Slider(id="lz", min=2, max=6, step=0.1, value=2.5,
                                marks={i: f"{i}m" for i in range(2, 7)}, tooltip={"placement": "bottom"}),
                 ], className="slider-row"),
-            ], className="control-section"),
+            ], className="control-section", id="section-dimensions"),
 
             html.Div([
                 html.H3("Mode à visualiser"),
@@ -120,7 +123,7 @@ app.layout = html.Div([
                     dcc.Slider(id="mode-p", min=0, max=4, step=1, value=0, marks={i: str(i) for i in range(5)}),
                 ], className="slider-row"),
                 html.Div(id="freq-display", className="freq-badge"),
-            ], className="control-section"),
+            ], className="control-section", id="section-mode-selector"),
 
             html.Div([
                 html.H3("Enceintes"),
@@ -135,23 +138,23 @@ app.layout = html.Div([
             html.Div([
                 html.H3("Vue 2D — Cliquer pour placer les enceintes"),
                 dcc.Graph(id="graph-2d"),
-            ], className="graph-box"),
+            ], className="graph-box", id="section-2d-view"),
             html.Div([
                 html.H3("Vue 3D — Volume"),
                 dcc.Graph(id="graph-3d"),
-            ], className="graph-box"),
+            ], className="graph-box", id="section-3d-view"),
         ], className="graphs"),
 
         html.Div([
             html.H3("🔍 Analyse acoustique"),
             html.Div([html.Button("Lancer l'analyse", id="analyse-btn", className="btn")], className="analyse-btn-row"),
             dcc.Loading(type="circle", color=AMBER, children=html.Div(id="analyse-output")),
-        ], className="analyse-section"),
+        ], className="analyse-section", id="section-analyse"),
 
         html.Div([
             html.H3("Premiers modes de résonance"),
             html.Div(id="modes-table"),
-        ], className="modes-section"),
+        ], className="modes-section", id="section-modes-table"),
 
     ], id="panel-v1"),
 
@@ -258,6 +261,24 @@ app.layout = html.Div([
     dcc.Store(id="room-points-store", data={"points": [], "closed": False}),
     dcc.Store(id="speakers-store-v2", data={"s1": None, "s2": None}),
     dcc.Store(id="rooms-library-store", data=[]),
+    dcc.Store(id="tutorial-seen", storage_type="local", data=False),
+    dcc.Store(id="tutorial-step", data=-1),
+
+    # Tutorial overlay
+    html.Div(id="tutorial-hl-dummy", style={"display": "none"}),
+    html.Div([
+        html.Div(className="tutorial-dim"),
+        html.Div([
+            html.Div(id="tutorial-step-indicator", className="tutorial-step-indicator"),
+            html.H4(id="tutorial-title", className="tutorial-title"),
+            html.P(id="tutorial-text", className="tutorial-text"),
+            html.Div([
+                html.Button("← Retour", id="tutorial-prev", className="btn btn-outline", n_clicks=0),
+                html.Button("Suivant →", id="tutorial-next", className="btn", n_clicks=0),
+                html.Button("Passer", id="tutorial-skip", className="tutorial-skip-btn", n_clicks=0),
+            ], className="tutorial-actions"),
+        ], className="tutorial-card"),
+    ], id="tutorial-overlay", style={"display": "none"}),
 
 ], className="container")
 
@@ -430,8 +451,9 @@ def graph3d(m, n, p, Lx, Ly, Lz, spk):
         if s:
             fig.add_trace(go.Scatter3d(
                 x=[s["x"]], y=[s["y"]], z=[0.05], mode="markers+text",
-                text=[label], textfont=dict(size=12, color=DARK if color==WHITE else WHITE),
-                marker=dict(size=10, color=color, line=dict(color=border, width=2)),
+                text=[label], textposition="middle center",
+                textfont=dict(size=12, color=DARK if color==WHITE else WHITE, family="Arial Black"),
+                marker=dict(size=10, color=color, symbol="circle", line=dict(color=border, width=2)),
                 name=f"Enceinte {label}"))
     ratio = max(Lx, Ly, Lz)
     fig.update_layout(
@@ -775,8 +797,9 @@ def graph3d_v2(mode_idx, room, Lz, spk):
         if s:
             fig.add_trace(go.Scatter3d(
                 x=[s["x"]], y=[s["y"]], z=[0.05], mode="markers+text",
-                text=[label], textfont=dict(size=12, color=DARK if color==WHITE else WHITE),
-                marker=dict(size=10, color=color, line=dict(color=border, width=2)),
+                text=[label], textposition="middle center",
+                textfont=dict(size=12, color=DARK if color==WHITE else WHITE, family="Arial Black"),
+                marker=dict(size=10, color=color, symbol="circle", line=dict(color=border, width=2)),
                 name=f"Enceinte {label}"))
 
     xs = [p["x"] for p in pts]
@@ -1021,6 +1044,122 @@ def load_room_from_library(name, rooms):
                 r.get("lz", 2.5),
             )
     return no_update, no_update, no_update, no_update
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tutorial
+# ─────────────────────────────────────────────────────────────────────────────
+
+TUTORIAL_STEPS = [
+    {"step": "1 / 6", "title": "Dimensions de la pièce",
+     "text": "Réglez les dimensions de votre pièce avec ces curseurs : Longueur X, Largeur Y, Hauteur Z."},
+    {"step": "2 / 6", "title": "Sélecteur de mode",
+     "text": "Choisissez le mode de résonance à visualiser (m, n, p). Les modes axiaux ★★★ sont les plus problématiques."},
+    {"step": "3 / 6", "title": "Vue 2D",
+     "text": "Cliquez ici pour placer vos enceintes A et B. La carte montre les zones de haute (+1, ambre) et basse (−1, bleue) pression."},
+    {"step": "4 / 6", "title": "Vue 3D",
+     "text": "Visualisation 3D du champ de pression dans tout le volume de la pièce."},
+    {"step": "5 / 6", "title": "Bouton Analyse",
+     "text": "Cliquez ici pour obtenir des recommandations acoustiques personnalisées basées sur la position de vos enceintes et le mode sélectionné."},
+    {"step": "6 / 6", "title": "Table des modes",
+     "text": "Tous les modes de résonance de la pièce classés par importance. Les modes axiaux ★★★ à basse fréquence sont les plus problématiques."},
+]
+
+
+@app.callback(
+    Output("tutorial-step", "data"),
+    Input("tutorial-seen", "data"),
+    prevent_initial_call=False,
+)
+def tutorial_init(seen):
+    if not seen:
+        return 0
+    return -1
+
+
+@app.callback(
+    Output("tutorial-step", "data", allow_duplicate=True),
+    Output("tutorial-seen", "data"),
+    Input("tutorial-btn", "n_clicks"),
+    Input("tutorial-skip", "n_clicks"),
+    Input("tutorial-next", "n_clicks"),
+    Input("tutorial-prev", "n_clicks"),
+    State("tutorial-step", "data"),
+    prevent_initial_call=True,
+)
+def tutorial_navigate(btn_n, skip_n, next_n, prev_n, step):
+    ctx = callback_context
+    if not ctx.triggered:
+        return no_update, no_update
+    trigger = ctx.triggered[0]["prop_id"]
+    if "tutorial-btn" in trigger:
+        return 0, False
+    if "tutorial-skip" in trigger:
+        return -1, True
+    if "tutorial-next" in trigger:
+        step = step if step is not None else 0
+        if step >= len(TUTORIAL_STEPS) - 1:
+            return -1, True
+        return step + 1, no_update
+    if "tutorial-prev" in trigger:
+        step = step if step is not None else 0
+        return max(0, step - 1), no_update
+    return no_update, no_update
+
+
+@app.callback(
+    Output("tutorial-overlay", "style"),
+    Output("tutorial-step-indicator", "children"),
+    Output("tutorial-title", "children"),
+    Output("tutorial-text", "children"),
+    Output("tutorial-prev", "style"),
+    Output("tutorial-next", "children"),
+    Input("tutorial-step", "data"),
+)
+def tutorial_display(step):
+    if step is None or step < 0:
+        return {"display": "none"}, no_update, no_update, no_update, no_update, no_update
+    s = TUTORIAL_STEPS[min(step, len(TUTORIAL_STEPS) - 1)]
+    prev_style = {"visibility": "hidden", "marginTop": "10px"} if step == 0 else {"marginTop": "10px"}
+    next_label = "Terminer ✓" if step >= len(TUTORIAL_STEPS) - 1 else "Suivant →"
+    return (
+        {"display": "block"},
+        s["step"],
+        s["title"],
+        s["text"],
+        prev_style,
+        next_label,
+    )
+
+
+app.clientside_callback(
+    """
+    function(step) {
+        var targets = [
+            'section-dimensions',
+            'section-mode-selector',
+            'section-2d-view',
+            'section-3d-view',
+            'section-analyse',
+            'section-modes-table'
+        ];
+        targets.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('tutorial-highlight');
+        });
+        if (step !== null && step !== undefined && step >= 0 && step < targets.length) {
+            var el = document.getElementById(targets[step]);
+            if (el) {
+                el.classList.add('tutorial-highlight');
+                el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+            }
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("tutorial-hl-dummy", "children"),
+    Input("tutorial-step", "data"),
+)
 
 
 server = app.server
